@@ -117,6 +117,10 @@ class AlphaZeroAgent:
 
         if self.cfg.policy.cuda and torch.cuda.is_available():
             self.cfg.policy.device = "cuda"
+        elif (
+            getattr(self.cfg.policy, "mps", False) and torch.backends.mps.is_available()
+        ):
+            self.cfg.policy.device = "mps"
         else:
             self.cfg.policy.device = "cpu"
         self.policy = create_policy(
