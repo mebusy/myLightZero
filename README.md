@@ -1,5 +1,7 @@
 <div id="top"></div>
 
+[myNotes](./myNote.md)
+
 # LightZero
 
 <div align="center">
