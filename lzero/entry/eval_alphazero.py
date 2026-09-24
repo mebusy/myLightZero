@@ -15,13 +15,13 @@ from lzero.worker import AlphaZeroEvaluator
 
 
 def eval_alphazero(
-        input_cfg: Tuple[dict, dict],
-        seed: int = 0,
-        model: Optional[torch.nn.Module] = None,
-        model_path: Optional[str] = None,
-        num_episodes_each_seed: int = 1,
-        print_seed_details: int = False,
-) -> 'Policy':  # noqa
+    input_cfg: Tuple[dict, dict],
+    seed: int = 0,
+    model: Optional[torch.nn.Module] = None,
+    model_path: Optional[str] = None,
+    num_episodes_each_seed: int = 1,
+    print_seed_details: int = False,
+) -> "Policy":  # noqa
     """
     Overview:
         The eval entry for AlphaZero.
@@ -42,15 +42,21 @@ def eval_alphazero(
     create_cfg.policy.type = create_cfg.policy.type
 
     if cfg.policy.cuda and torch.cuda.is_available():
-        cfg.policy.device = 'cuda'
+        cfg.policy.device = "cuda"
     else:
-        cfg.policy.device = 'cpu'
+        cfg.policy.device = "cpu"
 
-    cfg = compile_config(cfg, seed=seed, env=None, auto=True, create_cfg=create_cfg, save_cfg=True)
+    cfg = compile_config(
+        cfg, seed=seed, env=None, auto=True, create_cfg=create_cfg, save_cfg=True
+    )
     # Create main components: env, policy
     env_fn, collector_env_cfg, evaluator_env_cfg = get_vec_env_setting(cfg.env)
-    collector_env = create_env_manager(cfg.env.manager, [partial(env_fn, cfg=c) for c in collector_env_cfg])
-    evaluator_env = create_env_manager(cfg.env.manager, [partial(env_fn, cfg=c) for c in evaluator_env_cfg])
+    collector_env = create_env_manager(
+        cfg.env.manager, [partial(env_fn, cfg=c) for c in collector_env_cfg]
+    )
+    evaluator_env = create_env_manager(
+        cfg.env.manager, [partial(env_fn, cfg=c) for c in evaluator_env_cfg]
+    )
     collector_env.seed(cfg.seed)
     evaluator_env.seed(cfg.seed, dynamic_seed=False)
     set_pkg_seed(cfg.seed, use_cuda=cfg.policy.cuda)
@@ -59,14 +65,18 @@ def eval_alphazero(
     # train_alphazero, which supplies both compiled and create configs.
     cfg.policy.full_cfg = cfg
     cfg.policy.create_cfg = create_cfg
-    policy = create_policy(cfg.policy, model=model, enable_field=['learn', 'collect', 'eval'])
+    policy = create_policy(
+        cfg.policy, model=model, enable_field=["learn", "collect", "eval"]
+    )
 
     # load pretrained model
     if model_path is not None:
-        policy.learn_mode.load_state_dict(torch.load(model_path, map_location=cfg.policy.device))
+        policy.learn_mode.load_state_dict(
+            torch.load(model_path, map_location=cfg.policy.device)
+        )
 
     # Create worker components: learner, collector, evaluator, replay buffer, commander.
-    tb_logger = SummaryWriter(os.path.join('./{}/log/'.format(cfg.exp_name), 'serial'))
+    tb_logger = SummaryWriter(os.path.join("./{}/log/".format(cfg.exp_name), "serial"))
 
     evaluator = AlphaZeroEvaluator(
         eval_freq=cfg.policy.eval_freq,
@@ -85,16 +95,21 @@ def eval_alphazero(
         returns = []
         for i in range(num_episodes_each_seed):
             stop_flag, episode_info = evaluator.eval()
-            returns.append(episode_info['eval_episode_return'])
+            returns.append(episode_info["eval_episode_return"])
 
         returns = np.array(returns)
 
         if print_seed_details:
             print("=" * 20)
-            print(f'In seed {seed}, returns: {returns}')
-            if cfg.policy.simulation_env_id in ['tictactoe', 'connect4', 'gomoku', 'chess']:
+            print(f"In seed {seed}, returns: {returns}")
+            if cfg.policy.simulation_env_id in [
+                "tictactoe",
+                "connect4",
+                "gomoku",
+                "chess",
+            ]:
                 print(
-                    f'win rate: {len(np.where(returns == 1.)[0]) / num_episodes_each_seed}, draw rate: {len(np.where(returns == 0.)[0]) / num_episodes_each_seed}, lose rate: {len(np.where(returns == -1.)[0]) / num_episodes_each_seed}'
+                    f"win rate: {len(np.where(returns == 1.)[0]) / num_episodes_each_seed}, draw rate: {len(np.where(returns == 0.)[0]) / num_episodes_each_seed}, lose rate: {len(np.where(returns == -1.)[0]) / num_episodes_each_seed}"
                 )
             print("=" * 20)
 

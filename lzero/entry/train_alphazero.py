@@ -15,13 +15,13 @@ from tensorboardX import SummaryWriter
 
 
 def train_alphazero(
-        input_cfg: Tuple[dict, dict],
-        seed: int = 0,
-        model: Optional[torch.nn.Module] = None,
-        model_path: Optional[str] = None,
-        max_train_iter: Optional[int] = int(1e10),
-        max_env_step: Optional[int] = int(1e10),
-) -> 'Policy':  # noqa
+    input_cfg: Tuple[dict, dict],
+    seed: int = 0,
+    model: Optional[torch.nn.Module] = None,
+    model_path: Optional[str] = None,
+    max_train_iter: Optional[int] = int(1e10),
+    max_env_step: Optional[int] = int(1e10),
+) -> "Policy":  # noqa
     """
     Overview:
         The train entry for AlphaZero.
@@ -44,15 +44,21 @@ def train_alphazero(
     create_cfg.policy.type = create_cfg.policy.type
 
     if cfg.policy.cuda and torch.cuda.is_available():
-        cfg.policy.device = 'cuda'
+        cfg.policy.device = "cuda"
     else:
-        cfg.policy.device = 'cpu'
+        cfg.policy.device = "cpu"
 
-    cfg = compile_config(cfg, seed=seed, env=None, auto=True, create_cfg=create_cfg, save_cfg=True)
+    cfg = compile_config(
+        cfg, seed=seed, env=None, auto=True, create_cfg=create_cfg, save_cfg=True
+    )
     # Create main components: env, policy
     env_fn, collector_env_cfg, evaluator_env_cfg = get_vec_env_setting(cfg.env)
-    collector_env = create_env_manager(cfg.env.manager, [partial(env_fn, cfg=c) for c in collector_env_cfg])
-    evaluator_env = create_env_manager(cfg.env.manager, [partial(env_fn, cfg=c) for c in evaluator_env_cfg])
+    collector_env = create_env_manager(
+        cfg.env.manager, [partial(env_fn, cfg=c) for c in collector_env_cfg]
+    )
+    evaluator_env = create_env_manager(
+        cfg.env.manager, [partial(env_fn, cfg=c) for c in evaluator_env_cfg]
+    )
     collector_env.seed(cfg.seed)
     evaluator_env.seed(cfg.seed, dynamic_seed=False)
     set_pkg_seed(cfg.seed, use_cuda=cfg.policy.cuda)
@@ -61,16 +67,24 @@ def train_alphazero(
     cfg.policy.full_cfg = cfg
     cfg.policy.create_cfg = create_cfg
 
-    policy = create_policy(cfg.policy, model=model, enable_field=['learn', 'collect', 'eval'])
+    policy = create_policy(
+        cfg.policy, model=model, enable_field=["learn", "collect", "eval"]
+    )
 
     # load pretrained model
     if model_path is not None:
-        policy.learn_mode.load_state_dict(torch.load(model_path, map_location=cfg.policy.device))
+        policy.learn_mode.load_state_dict(
+            torch.load(model_path, map_location=cfg.policy.device)
+        )
 
     # Create worker components: learner, collector, evaluator, replay buffer, commander.
-    tb_logger = SummaryWriter(os.path.join('./{}/log/'.format(cfg.exp_name), 'serial'))
-    learner = BaseLearner(cfg.policy.learn.learner, policy.learn_mode, tb_logger, exp_name=cfg.exp_name)
-    replay_buffer = create_buffer(cfg.policy.other.replay_buffer, tb_logger=tb_logger, exp_name=cfg.exp_name)
+    tb_logger = SummaryWriter(os.path.join("./{}/log/".format(cfg.exp_name), "serial"))
+    learner = BaseLearner(
+        cfg.policy.learn.learner, policy.learn_mode, tb_logger, exp_name=cfg.exp_name
+    )
+    replay_buffer = create_buffer(
+        cfg.policy.other.replay_buffer, tb_logger=tb_logger, exp_name=cfg.exp_name
+    )
 
     policy_config = cfg.policy
     batch_size = policy_config.batch_size
@@ -94,18 +108,18 @@ def train_alphazero(
     # Main loop
     # ==============================================================
     # Learner's before_run hook.
-    learner.call_hook('before_run')
+    learner.call_hook("before_run")
     if cfg.policy.update_per_collect is not None:
         update_per_collect = cfg.policy.update_per_collect
     while True:
         collect_kwargs = {}
         # set temperature for visit count distributions according to the train_iter,
         # please refer to Appendix D in MuZero paper for details.
-        collect_kwargs['temperature'] = visit_count_temperature(
+        collect_kwargs["temperature"] = visit_count_temperature(
             policy_config.manual_temperature_decay,
             policy_config.fixed_temperature_value,
             policy_config.threshold_training_steps_for_final_temperature,
-            trained_steps=learner.train_iter
+            trained_steps=learner.train_iter,
         )
 
         # Evaluate policy performance
@@ -119,12 +133,16 @@ def train_alphazero(
                 break
 
         # Collect data by default config n_sample/n_episode
-        new_data = collector.collect(train_iter=learner.train_iter, policy_kwargs=collect_kwargs)
+        new_data = collector.collect(
+            train_iter=learner.train_iter, policy_kwargs=collect_kwargs
+        )
         new_data = sum(new_data, [])
         if cfg.policy.update_per_collect is None:
             # update_per_collect is None, then update_per_collect is set to the number of collected transitions multiplied by the replay_ratio.
             collected_transitions_num = len(new_data)
-            update_per_collect = int(collected_transitions_num * cfg.policy.replay_ratio)
+            update_per_collect = int(
+                collected_transitions_num * cfg.policy.replay_ratio
+            )
         replay_buffer.push(new_data, cur_collector_envstep=collector.envstep)
 
         # Learn policy from collected data
@@ -133,8 +151,8 @@ def train_alphazero(
             train_data = replay_buffer.sample(batch_size, learner.train_iter)
             if train_data is None:
                 logging.warning(
-                    'The data in replay_buffer is not sufficient to sample a mini-batch.'
-                    'continue to collect now ....'
+                    "The data in replay_buffer is not sufficient to sample a mini-batch."
+                    "continue to collect now ...."
                 )
                 break
 
@@ -143,5 +161,5 @@ def train_alphazero(
             break
 
     # Learner's after_run hook.
-    learner.call_hook('after_run')
+    learner.call_hook("after_run")
     return policy
