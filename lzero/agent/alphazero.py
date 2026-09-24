@@ -123,6 +123,9 @@ class AlphaZeroAgent:
             self.cfg.policy.device = "mps"
         else:
             self.cfg.policy.device = "cpu"
+
+        print("Agent Using device: {}".format(self.cfg.policy.device))
+
         self.policy = create_policy(
             self.cfg.policy, model=model, enable_field=["learn", "collect", "eval"]
         )

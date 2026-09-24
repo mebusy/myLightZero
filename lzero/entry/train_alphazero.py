@@ -50,6 +50,8 @@ def train_alphazero(
     else:
         cfg.policy.device = "cpu"
 
+    print("Policy will be trained on device: {}".format(cfg.policy.device))
+
     cfg = compile_config(
         cfg, seed=seed, env=None, auto=True, create_cfg=create_cfg, save_cfg=True
     )
