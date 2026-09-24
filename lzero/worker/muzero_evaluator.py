@@ -9,10 +9,17 @@ import torch
 import wandb
 from ding.envs import BaseEnvManager
 from ding.torch_utils import to_item, to_ndarray, to_tensor
-from ding.utils import (EasyTimer, broadcast_object_list, build_logger,
-                        get_rank, get_world_size)
-from ding.worker.collector.base_serial_evaluator import (ISerialEvaluator,
-                                                         VectorEvalMonitor)
+from ding.utils import (
+    EasyTimer,
+    broadcast_object_list,
+    build_logger,
+    get_rank,
+    get_world_size,
+)
+from ding.worker.collector.base_serial_evaluator import (
+    ISerialEvaluator,
+    VectorEvalMonitor,
+)
 from ditk import logging
 from easydict import EasyDict
 from lzero.mcts.buffer.game_segment import GameSegment
@@ -24,10 +31,10 @@ def balanced_episode_targets(env_num: int, n_episode: int) -> np.ndarray:
     """Return the fixed per-environment quotas used by ``VectorEvalMonitor``."""
     if env_num <= 0 or n_episode < env_num:
         raise ValueError(
-            f'n_episode must be at least env_num, got n_episode={n_episode}, env_num={env_num}'
+            f"n_episode must be at least env_num, got n_episode={n_episode}, env_num={env_num}"
         )
     targets = np.full(env_num, n_episode // env_num, dtype=np.int64)
-    targets[:n_episode % env_num] += 1
+    targets[: n_episode % env_num] += 1
     return targets
 
 
@@ -56,21 +63,21 @@ class MuZeroEvaluator(ISerialEvaluator):
             - cfg (:obj:`EasyDict`): An EasyDict object representing the default configuration.
         """
         cfg = EasyDict(copy.deepcopy(cls.config))
-        cfg.cfg_type = cls.__name__ + 'Dict'
+        cfg.cfg_type = cls.__name__ + "Dict"
         return cfg
 
     def __init__(
-            self,
-            eval_freq: int = 1000,
-            n_evaluator_episode: int = 3,
-            stop_value: float = 1e6,
-            env: Optional[BaseEnvManager] = None,
-            policy: Optional[namedtuple] = None,
-            tb_logger: Optional['SummaryWriter'] = None,
-            exp_name: str = 'default_experiment',
-            instance_name: str = 'evaluator',
-            policy_config: Optional[EasyDict] = None,
-            task_id: Optional[int] = None,
+        self,
+        eval_freq: int = 1000,
+        n_evaluator_episode: int = 3,
+        stop_value: float = 1e6,
+        env: Optional[BaseEnvManager] = None,
+        policy: Optional[namedtuple] = None,
+        tb_logger: Optional["SummaryWriter"] = None,
+        exp_name: str = "default_experiment",
+        instance_name: str = "evaluator",
+        policy_config: Optional[EasyDict] = None,
+        task_id: Optional[int] = None,
     ) -> None:
         """
         Overview:
@@ -87,7 +94,9 @@ class MuZeroEvaluator(ISerialEvaluator):
             - policy_config (:obj:`Optional[EasyDict]`): Configuration for the policy.
             - task_id (:obj:`Optional[int]`): The unique identifier for the task. If None, the evaluator operates in single-task mode. In a multi-task setting, each task corresponds to a specific evaluator instance.
         """
-        self.stop_event = threading.Event()  # Event to signal a stop, e.g., due to a timeout.
+        self.stop_event = (
+            threading.Event()
+        )  # Event to signal a stop, e.g., due to a timeout.
         self.task_id = task_id
         self._eval_freq = eval_freq
         self._exp_name = exp_name
@@ -98,21 +107,25 @@ class MuZeroEvaluator(ISerialEvaluator):
         if self._rank == 0:
             if tb_logger is not None:
                 self._logger, _ = build_logger(
-                    f'./{self._exp_name}/log/{self._instance_name}', self._instance_name, need_tb=False
+                    f"./{self._exp_name}/log/{self._instance_name}",
+                    self._instance_name,
+                    need_tb=False,
                 )
                 self._tb_logger = tb_logger
             else:
                 self._logger, self._tb_logger = build_logger(
-                    f'./{self._exp_name}/log/{self._instance_name}', self._instance_name
+                    f"./{self._exp_name}/log/{self._instance_name}", self._instance_name
                 )
         else:
             if tb_logger is not None:
                 self._logger, _ = build_logger(
-                    f'./{self._exp_name}/log/{self._instance_name}', self._instance_name, need_tb=False
+                    f"./{self._exp_name}/log/{self._instance_name}",
+                    self._instance_name,
+                    need_tb=False,
                 )
                 self._tb_logger = tb_logger
 
-        logging.info(f'rank {self._rank}, self.task_id: {self.task_id}')
+        logging.info(f"rank {self._rank}, self.task_id: {self.task_id}")
         self.reset(policy, env)
         self._timer = EasyTimer()
         self._default_n_episode = n_evaluator_episode
@@ -144,12 +157,16 @@ class MuZeroEvaluator(ISerialEvaluator):
         Arguments:
             - _policy (:obj:`Optional[namedtuple]`): New policy to use. If None, resets the existing policy.
         """
-        assert hasattr(self, '_env'), "Please set environment first."
+        assert hasattr(self, "_env"), "Please set environment first."
         if _policy is not None:
             self._policy = _policy
         self._policy.reset(task_id=self.task_id)
 
-    def reset(self, _policy: Optional[namedtuple] = None, _env: Optional[BaseEnvManager] = None) -> None:
+    def reset(
+        self,
+        _policy: Optional[namedtuple] = None,
+        _env: Optional[BaseEnvManager] = None,
+    ) -> None:
         """
         Overview:
             Reset both the policy and the environment.
@@ -173,7 +190,7 @@ class MuZeroEvaluator(ISerialEvaluator):
         if self._end_flag:
             return
         self._end_flag = True
-        if hasattr(self, '_env'):
+        if hasattr(self, "_env"):
             self._env.close()
         if self._tb_logger:
             self._tb_logger.flush()
@@ -203,12 +220,12 @@ class MuZeroEvaluator(ISerialEvaluator):
         return True
 
     def eval(
-            self,
-            save_ckpt_fn: Optional[Callable] = None,
-            train_iter: int = -1,
-            envstep: int = -1,
-            n_episode: Optional[int] = None,
-            return_trajectory: bool = False,
+        self,
+        save_ckpt_fn: Optional[Callable] = None,
+        train_iter: int = -1,
+        envstep: int = -1,
+        n_episode: Optional[int] = None,
+        return_trajectory: bool = False,
     ) -> Tuple[bool, Dict[str, Any]]:
         """
         Overview:
@@ -246,7 +263,9 @@ class MuZeroEvaluator(ISerialEvaluator):
         if eval_flag:
             if n_episode is None:
                 n_episode = self._default_n_episode
-            assert n_episode is not None, "Please specify the number of evaluation episodes (n_episode)."
+            assert (
+                n_episode is not None
+            ), "Please specify the number of evaluation episodes (n_episode)."
             envstep_count = 0
             eval_monitor = VectorEvalMonitor(self._env.env_num, n_episode)
             env_nums = self._env.env_num
@@ -260,18 +279,26 @@ class MuZeroEvaluator(ISerialEvaluator):
             # Wait for all environments to be ready, especially in subprocess-based environment managers.
             retry_waiting_time = 0.001
             while len(init_obs.keys()) != self._env_num:
-                self._logger.info(f"Waiting for all environments to reset. Current ready envs: {list(init_obs.keys())}")
+                self._logger.info(
+                    f"Waiting for all environments to reset. Current ready envs: {list(init_obs.keys())}"
+                )
                 time.sleep(retry_waiting_time)
                 init_obs = self._env.ready_obs
 
-            action_mask_dict = {i: to_ndarray(init_obs[i]['action_mask']) for i in range(env_nums)}
-            to_play_dict = {i: to_ndarray(init_obs[i]['to_play']) for i in range(env_nums)}
+            action_mask_dict = {
+                i: to_ndarray(init_obs[i]["action_mask"]) for i in range(env_nums)
+            }
+            to_play_dict = {
+                i: to_ndarray(init_obs[i]["to_play"]) for i in range(env_nums)
+            }
 
             timestep_dict = {}
             for i in range(env_nums):
-                if 'timestep' not in init_obs[i]:
-                    self._logger.warning(f"'timestep' key is missing in init_obs[{i}], assigning value -1")
-                timestep_dict[i] = to_ndarray(init_obs[i].get('timestep', -1))
+                if "timestep" not in init_obs[i]:
+                    self._logger.warning(
+                        f"'timestep' key is missing in init_obs[{i}], assigning value -1"
+                    )
+                timestep_dict[i] = to_ndarray(init_obs[i].get("timestep", -1))
 
             dones = np.array([False for _ in range(env_nums)])
 
@@ -280,12 +307,16 @@ class MuZeroEvaluator(ISerialEvaluator):
                     self._env.action_space,
                     game_segment_length=self.policy_config.game_segment_length,
                     config=self.policy_config,
-                    task_id=self.task_id
-                ) for _ in range(env_nums)
+                    task_id=self.task_id,
+                )
+                for _ in range(env_nums)
             ]
             for i in range(env_nums):
                 game_segments[i].reset(
-                    [to_ndarray(init_obs[i]['observation']) for _ in range(self.policy_config.model.frame_stack_num)]
+                    [
+                        to_ndarray(init_obs[i]["observation"])
+                        for _ in range(self.policy_config.model.frame_stack_num)
+                    ]
                 )
 
             ready_env_id = set()
@@ -301,62 +332,120 @@ class MuZeroEvaluator(ISerialEvaluator):
                     # Check if a timeout has occurred.
                     if self.stop_event.is_set():
                         # self.stop_event may be set in safe_eval() methd in lzero/entry/utils.py
-                        self._logger.info("[EVALUATOR]: Evaluation aborted due to timeout.")
+                        self._logger.info(
+                            "[EVALUATOR]: Evaluation aborted due to timeout."
+                        )
                         break
 
                     # Get observations from ready environments.
                     obs = self._env.ready_obs
                     new_available_env_id = set(obs.keys()).difference(ready_env_id)
                     ready_env_id.update(
-                        env_id for env_id in new_available_env_id
+                        env_id
+                        for env_id in new_available_env_id
                         if completed_episodes[env_id] < target_episodes[env_id]
                     )
                     ready_env_id_list = sorted(ready_env_id)
 
                     # Prepare stacked observations and other inputs for the policy.
-                    stack_obs = [game_segments[env_id].get_obs() for env_id in ready_env_id_list]
-                    action_mask = [action_mask_dict[env_id] for env_id in ready_env_id_list]
+                    stack_obs = [
+                        game_segments[env_id].get_obs() for env_id in ready_env_id_list
+                    ]
+                    action_mask = [
+                        action_mask_dict[env_id] for env_id in ready_env_id_list
+                    ]
                     to_play = [to_play_dict[env_id] for env_id in ready_env_id_list]
                     timestep = [timestep_dict[env_id] for env_id in ready_env_id_list]
 
                     stack_obs = to_ndarray(stack_obs)
-                    stack_obs = prepare_observation(stack_obs, self.policy_config.model.model_type)
-                    stack_obs = torch.from_numpy(stack_obs).to(self.policy_config.device).float()
+                    stack_obs = prepare_observation(
+                        stack_obs, self.policy_config.model.model_type
+                    )
+                    stack_obs = (
+                        torch.from_numpy(stack_obs)
+                        .to(self.policy_config.device)
+                        .float()
+                    )
 
                     # ==============================================================
                     # Policy Forward Pass
                     # ==============================================================
                     if self.task_id is None:
                         # Single-task setting
-                        policy_output = self._policy.forward(stack_obs, action_mask, to_play, ready_env_id=ready_env_id_list, timestep=timestep)
+                        policy_output = self._policy.forward(
+                            stack_obs,
+                            action_mask,
+                            to_play,
+                            ready_env_id=ready_env_id_list,
+                            timestep=timestep,
+                        )
                     else:
                         # Multi-task setting
-                        policy_output = self._policy.forward(stack_obs, action_mask, to_play, ready_env_id=ready_env_id_list, timestep=timestep, task_id=self.task_id)
+                        policy_output = self._policy.forward(
+                            stack_obs,
+                            action_mask,
+                            to_play,
+                            ready_env_id=ready_env_id_list,
+                            timestep=timestep,
+                            task_id=self.task_id,
+                        )
 
                     # Unpack policy outputs.
-                    actions_with_env_id = {k: v['action'] for k, v in policy_output.items()}
-                    distributions_dict_with_env_id = {k: v['visit_count_distributions'] for k, v in policy_output.items()}
+                    actions_with_env_id = {
+                        k: v["action"] for k, v in policy_output.items()
+                    }
+                    distributions_dict_with_env_id = {
+                        k: v["visit_count_distributions"]
+                        for k, v in policy_output.items()
+                    }
                     if self.policy_config.sampled_algo:
-                        root_sampled_actions_dict_with_env_id = {k: v['root_sampled_actions'] for k, v in policy_output.items()}
-                    value_dict_with_env_id = {k: v['searched_value'] for k, v in policy_output.items()}
-                    pred_value_dict_with_env_id = {k: v['predicted_value'] for k, v in policy_output.items()}
-                    timestep_dict_with_env_id = {k: v.get('timestep', -1) for k, v in policy_output.items()}
-                    visit_entropy_dict_with_env_id = {k: v['visit_count_distribution_entropy'] for k, v in policy_output.items()}
+                        root_sampled_actions_dict_with_env_id = {
+                            k: v["root_sampled_actions"]
+                            for k, v in policy_output.items()
+                        }
+                    value_dict_with_env_id = {
+                        k: v["searched_value"] for k, v in policy_output.items()
+                    }
+                    pred_value_dict_with_env_id = {
+                        k: v["predicted_value"] for k, v in policy_output.items()
+                    }
+                    timestep_dict_with_env_id = {
+                        k: v.get("timestep", -1) for k, v in policy_output.items()
+                    }
+                    visit_entropy_dict_with_env_id = {
+                        k: v["visit_count_distribution_entropy"]
+                        for k, v in policy_output.items()
+                    }
 
                     # Remap outputs from policy's internal IDs to environment IDs.
-                    actions, distributions_dict, value_dict, pred_value_dict, timestep_dict, visit_entropy_dict = {}, {}, {}, {}, {}, {}
+                    (
+                        actions,
+                        distributions_dict,
+                        value_dict,
+                        pred_value_dict,
+                        timestep_dict,
+                        visit_entropy_dict,
+                    ) = ({}, {}, {}, {}, {}, {})
                     if self.policy_config.sampled_algo:
                         root_sampled_actions_dict = {}
 
                     for index, env_id in enumerate(ready_env_id_list):
                         actions[env_id] = actions_with_env_id.pop(env_id)
-                        distributions_dict[env_id] = distributions_dict_with_env_id.pop(env_id)
+                        distributions_dict[env_id] = distributions_dict_with_env_id.pop(
+                            env_id
+                        )
                         if self.policy_config.sampled_algo:
-                            root_sampled_actions_dict[env_id] = root_sampled_actions_dict_with_env_id.pop(env_id)
+                            root_sampled_actions_dict[env_id] = (
+                                root_sampled_actions_dict_with_env_id.pop(env_id)
+                            )
                         value_dict[env_id] = value_dict_with_env_id.pop(env_id)
-                        pred_value_dict[env_id] = pred_value_dict_with_env_id.pop(env_id)
+                        pred_value_dict[env_id] = pred_value_dict_with_env_id.pop(
+                            env_id
+                        )
                         timestep_dict[env_id] = timestep_dict_with_env_id.pop(env_id)
-                        visit_entropy_dict[env_id] = visit_entropy_dict_with_env_id.pop(env_id)
+                        visit_entropy_dict[env_id] = visit_entropy_dict_with_env_id.pop(
+                            env_id
+                        )
 
                     # ==============================================================
                     # Environment Interaction
@@ -364,30 +453,49 @@ class MuZeroEvaluator(ISerialEvaluator):
                     timesteps = self._env.step(actions)
                     timesteps = to_tensor(timesteps, dtype=torch.float32)
                     for env_id, episode_timestep in timesteps.items():
-                        obs, reward, done, info = episode_timestep.obs, episode_timestep.reward, episode_timestep.done, episode_timestep.info
+                        obs, reward, done, info = (
+                            episode_timestep.obs,
+                            episode_timestep.reward,
+                            episode_timestep.done,
+                            episode_timestep.info,
+                        )
 
                         eps_steps_lst[env_id] += 1
                         # This reset logic is specific to UniZero-like models.
-                        if self._policy.get_attribute('cfg').type in ['unizero', 'sampled_unizero']:
-                            self._policy.reset(env_id=env_id, current_steps=eps_steps_lst[env_id], reset_init_data=False, task_id=self.task_id)
+                        if self._policy.get_attribute("cfg").type in [
+                            "unizero",
+                            "sampled_unizero",
+                        ]:
+                            self._policy.reset(
+                                env_id=env_id,
+                                current_steps=eps_steps_lst[env_id],
+                                reset_init_data=False,
+                                task_id=self.task_id,
+                            )
 
                         game_segments[env_id].append(
-                            actions[env_id], to_ndarray(obs['observation']), reward, action_mask_dict[env_id],
-                            to_play_dict[env_id], timestep_dict[env_id]
+                            actions[env_id],
+                            to_ndarray(obs["observation"]),
+                            reward,
+                            action_mask_dict[env_id],
+                            to_play_dict[env_id],
+                            timestep_dict[env_id],
                         )
 
                         # IMPORTANT: The action_mask and to_play from the new observation correspond to the *next* state.
-                        action_mask_dict[env_id] = to_ndarray(obs['action_mask'])
-                        to_play_dict[env_id] = to_ndarray(obs['to_play'])
-                        timestep_dict[env_id] = to_ndarray(obs.get('timestep', -1))
+                        action_mask_dict[env_id] = to_ndarray(obs["action_mask"])
+                        to_play_dict[env_id] = to_ndarray(obs["to_play"])
+                        timestep_dict[env_id] = to_ndarray(obs.get("timestep", -1))
 
                         dones[env_id] = done
                         if episode_timestep.done:
                             self._policy.reset([env_id])
-                            reward = episode_timestep.info['score']
-                            saved_info = {'eval_episode_return': episode_timestep.info['score']}
-                            if 'episode_info' in episode_timestep.info:
-                                saved_info.update(episode_timestep.info['episode_info'])
+                            reward = episode_timestep.info["score"]
+                            saved_info = {
+                                "eval_episode_return": episode_timestep.info["score"]
+                            }
+                            if "episode_info" in episode_timestep.info:
+                                saved_info.update(episode_timestep.info["episode_info"])
                             eval_monitor.update_info(env_id, saved_info)
                             eval_monitor.update_reward(env_id, reward)
                             completed_episodes[env_id] += 1
@@ -407,23 +515,36 @@ class MuZeroEvaluator(ISerialEvaluator):
                             if completed_episodes[env_id] < target_episodes[env_id]:
                                 init_obs = self._env.ready_obs
                                 while env_id not in init_obs:
-                                    self._logger.info(f"Waiting for env {env_id} to reset. Current ready envs: {list(init_obs.keys())}")
+                                    self._logger.info(
+                                        f"Waiting for env {env_id} to reset. Current ready envs: {list(init_obs.keys())}"
+                                    )
                                     time.sleep(retry_waiting_time)
                                     init_obs = self._env.ready_obs
 
                                 # Re-initialize state for the new episode.
-                                action_mask_dict[env_id] = to_ndarray(init_obs[env_id]['action_mask'])
-                                to_play_dict[env_id] = to_ndarray(init_obs[env_id]['to_play'])
-                                timestep_dict[env_id] = to_ndarray(init_obs[env_id].get('timestep', -1))
+                                action_mask_dict[env_id] = to_ndarray(
+                                    init_obs[env_id]["action_mask"]
+                                )
+                                to_play_dict[env_id] = to_ndarray(
+                                    init_obs[env_id]["to_play"]
+                                )
+                                timestep_dict[env_id] = to_ndarray(
+                                    init_obs[env_id].get("timestep", -1)
+                                )
 
                                 game_segments[env_id] = GameSegment(
                                     self._env.action_space,
                                     game_segment_length=self.policy_config.game_segment_length,
                                     config=self.policy_config,
-                                    task_id=self.task_id
+                                    task_id=self.task_id,
                                 )
                                 game_segments[env_id].reset(
-                                    [init_obs[env_id]['observation'] for _ in range(self.policy_config.model.frame_stack_num)]
+                                    [
+                                        init_obs[env_id]["observation"]
+                                        for _ in range(
+                                            self.policy_config.model.frame_stack_num
+                                        )
+                                    ]
                                 )
                                 ready_env_id.add(env_id)
 
@@ -438,50 +559,66 @@ class MuZeroEvaluator(ISerialEvaluator):
             mean_episode_return = np.mean(episode_return)
             if mean_episode_return >= self._max_episode_return:
                 if save_ckpt_fn:
-                    save_ckpt_fn('WM_ckpt_best.pth.tar')
+                    save_ckpt_fn("WM_ckpt_best.pth.tar")
                 self._max_episode_return = mean_episode_return
             info = {
-                'train_iter': train_iter,
-                'ckpt_name': f'iteration_{train_iter}.pth.tar',
-                'episode_count': n_episode,
-                'envstep_count': envstep_count,
-                'avg_envstep_per_episode': envstep_count / n_episode if n_episode > 0 else 0,
-                'evaluate_time': duration,
-                'avg_envstep_per_sec': envstep_count / duration if duration > 0 else 0,
-                'avg_time_per_episode': n_episode / duration if duration > 0 else 0,
-                'reward_mean': np.mean(episode_return),
-                'reward_std': np.std(episode_return),
-                'reward_max': np.max(episode_return),
-                'reward_min': np.min(episode_return),
-                'eval/mean_return': np.mean(episode_return),
-                'eval/max_return': np.max(episode_return),
-                'eval/episode_length': envstep_count / n_episode if n_episode > 0 else 0,
+                "train_iter": train_iter,
+                "ckpt_name": f"iteration_{train_iter}.pth.tar",
+                "episode_count": n_episode,
+                "envstep_count": envstep_count,
+                "avg_envstep_per_episode": (
+                    envstep_count / n_episode if n_episode > 0 else 0
+                ),
+                "evaluate_time": duration,
+                "avg_envstep_per_sec": envstep_count / duration if duration > 0 else 0,
+                "avg_time_per_episode": n_episode / duration if duration > 0 else 0,
+                "reward_mean": np.mean(episode_return),
+                "reward_std": np.std(episode_return),
+                "reward_max": np.max(episode_return),
+                "reward_min": np.min(episode_return),
+                "eval/mean_return": np.mean(episode_return),
+                "eval/max_return": np.max(episode_return),
+                "eval/episode_length": (
+                    envstep_count / n_episode if n_episode > 0 else 0
+                ),
             }
             episode_info = eval_monitor.get_episode_info()
             if episode_info is not None:
                 info.update(episode_info)
 
-            logging.info(f'rank {self._rank}, self.task_id: {self.task_id}')
+            logging.info(f"rank {self._rank}, self.task_id: {self.task_id}")
             self._logger.info(self._logger.get_tabulate_vars_hor(info))
 
             # Log to TensorBoard and WandB.
             for k, v in info.items():
-                if k in ['train_iter', 'ckpt_name', 'each_reward'] or not np.isscalar(v):
+                if k in ["train_iter", "ckpt_name", "each_reward"] or not np.isscalar(
+                    v
+                ):
                     continue
                 if self.task_id is None:
-                    self._tb_logger.add_scalar(f'{self._instance_name}_iter/{k}', v, train_iter)
-                    self._tb_logger.add_scalar(f'{self._instance_name}_step/{k}', v, envstep)
+                    self._tb_logger.add_scalar(
+                        f"{self._instance_name}_iter/{k}", v, train_iter
+                    )
+                    self._tb_logger.add_scalar(
+                        f"{self._instance_name}_step/{k}", v, envstep
+                    )
                 else:
-                    self._tb_logger.add_scalar(f'{self._instance_name}_iter_task{self.task_id}/{k}', v, train_iter)
-                    self._tb_logger.add_scalar(f'{self._instance_name}_step_task{self.task_id}/{k}', v, envstep)
+                    self._tb_logger.add_scalar(
+                        f"{self._instance_name}_iter_task{self.task_id}/{k}",
+                        v,
+                        train_iter,
+                    )
+                    self._tb_logger.add_scalar(
+                        f"{self._instance_name}_step_task{self.task_id}/{k}", v, envstep
+                    )
                 if self.policy_config.use_wandb:
-                    wandb.log({f'{self._instance_name}_step/{k}': v}, step=envstep)
+                    wandb.log({f"{self._instance_name}_step/{k}": v}, step=envstep)
 
             # Check for new best performance and save checkpoint.
             mean_episode_return = np.mean(episode_return)
             if mean_episode_return > self._max_episode_return:
                 if save_ckpt_fn:
-                    save_ckpt_fn('ckpt_best.pth.tar')
+                    save_ckpt_fn("ckpt_best.pth.tar")
                 self._max_episode_return = mean_episode_return
 
             # Check if the stop condition is met.
@@ -493,7 +630,7 @@ class MuZeroEvaluator(ISerialEvaluator):
                 )
 
         # NOTE: Only for usual DDP not for unizero_multitask pipeline.
-        # Finalize DDP synchronization for evaluation results. 
+        # Finalize DDP synchronization for evaluation results.
         # if get_world_size() > 1:
         #     objects = [stop_flag, episode_info]
         #     print(f'rank {self._rank}, self.task_id: {self.task_id}')
@@ -504,5 +641,5 @@ class MuZeroEvaluator(ISerialEvaluator):
 
         episode_info = to_item(episode_info)
         if return_trajectory:
-            episode_info['trajectory'] = game_segments
+            episode_info["trajectory"] = game_segments
         return stop_flag, episode_info
