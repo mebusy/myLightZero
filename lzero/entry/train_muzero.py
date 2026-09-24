@@ -73,6 +73,8 @@ def train_muzero(
 
     if cfg.policy.cuda and torch.cuda.is_available():
         cfg.policy.device = "cuda"
+    elif getattr(cfg.policy, "mps", False) and torch.backends.mps.is_available():
+        cfg.policy.device = "mps"
     else:
         cfg.policy.device = "cpu"
 

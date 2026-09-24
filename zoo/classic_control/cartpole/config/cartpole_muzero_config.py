@@ -43,7 +43,10 @@ cartpole_muzero_config = dict(
         ),
         # (str) The path of the pretrained model. If None, the model will be initialized by the default model.
         model_path=None,
-        cuda=True,
+        cuda=False,
+        # Apple Silicon / Metal Performance Shaders.
+        # `cuda` 必须为 False；M4 没有 CUDA。
+        mps=True,
         env_type="not_board_games",
         game_segment_length=50,
         update_per_collect=update_per_collect,
@@ -100,4 +103,3 @@ if __name__ == "__main__":
         model_path=main_config.policy.model_path,
         max_env_step=max_env_step,
     )
-
