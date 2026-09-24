@@ -490,10 +490,19 @@ class MuZeroEvaluator(ISerialEvaluator):
                         dones[env_id] = done
                         if episode_timestep.done:
                             self._policy.reset([env_id])
-                            reward = episode_timestep.info["score"]
-                            saved_info = {
-                                "eval_episode_return": episode_timestep.info["score"]
-                            }
+                            if "eval_episode_return" in episode_timestep.info:
+                                reward = episode_timestep.info["eval_episode_return"]
+                            elif "score" in episode_timestep.info:
+                                reward = episode_timestep.info["score"]
+                            else:
+                                raise KeyError(
+                                    "Terminal environment info must contain either "
+                                    "'eval_episode_return' or 'score'; got "
+                                    f"{list(episode_timestep.info.keys())}"
+                                )
+
+                            saved_info = {"eval_episode_return": reward}
+
                             if "episode_info" in episode_timestep.info:
                                 saved_info.update(episode_timestep.info["episode_info"])
                             eval_monitor.update_info(env_id, saved_info)

@@ -111,6 +111,18 @@ def train_muzero(
         cfg.policy, model=model, enable_field=["learn", "collect", "eval"]
     )
 
+    # DI-engine's usual device placement recognizes cfg.policy.cuda, but the
+    # Apple-MPS flag is custom.  Move both online and target networks explicitly.
+    if cfg.policy.device == "mps":
+        policy._model.to(cfg.policy.device)
+        policy._target_model.to(cfg.policy.device)
+
+    logging.info(
+        "Online model device: %s; target model device: %s",
+        next(policy._model.parameters()).device,
+        next(policy._target_model.parameters()).device,
+    )
+
     # load pretrained model
     if model_path is not None:
         policy.learn_mode.load_state_dict(

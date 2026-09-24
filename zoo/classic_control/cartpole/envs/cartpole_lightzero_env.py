@@ -16,7 +16,7 @@ from matplotlib import animation
 from matplotlib.animation import PillowWriter
 
 
-@ENV_REGISTRY.register('cartpole_lightzero')
+@ENV_REGISTRY.register("cartpole_lightzero")
 class CartPoleEnv(BaseEnv):
     """
     LightZero version of the classic CartPole environment. This class includes methods for resetting, closing, and
@@ -42,7 +42,7 @@ class CartPoleEnv(BaseEnv):
     @classmethod
     def default_config(cls: type) -> EasyDict:
         cfg = EasyDict(copy.deepcopy(cls.config))
-        cfg.cfg_type = cls.__name__ + 'Dict'
+        cfg.cfg_type = cls.__name__ + "Dict"
         return cfg
 
     def __init__(self, cfg: dict = {}) -> None:
@@ -53,21 +53,23 @@ class CartPoleEnv(BaseEnv):
             cfg (dict): Configuration dict that includes `env_id`, `save_replay_gif`, and `replay_path_gif`.
         """
         self._cfg = cfg
-        self._enable_chance = self._cfg.get('enable_chance', False)
+        self._enable_chance = self._cfg.get("enable_chance", False)
         self._init_flag = False
-        self._replay_path_gif = cfg.get('replay_path_gif', None)
-        self._save_replay_gif = cfg.get('save_replay_gif', False)
+        self._replay_path_gif = cfg.get("replay_path_gif", None)
+        self._save_replay_gif = cfg.get("save_replay_gif", False)
         self._save_replay_count = 0
 
         # Define observation, action, and reward spaces.
         self._observation_space = gym.spaces.Box(
-            low=np.array([-4.8, float("-inf"), -0.42, float("-inf")]),
-            high=np.array([4.8, float("inf"), 0.42, float("inf")]),
+            low=np.array([-4.8, float("-inf"), -0.42, float("-inf")], dtype=np.float32),
+            high=np.array([4.8, float("inf"), 0.42, float("inf")], dtype=np.float32),
             shape=(4,),
-            dtype=np.float32
+            dtype=np.float32,
         )
         self._action_space = gym.spaces.Discrete(2)
-        self._reward_space = gym.spaces.Box(low=0.0, high=1.0, shape=(1,), dtype=np.float32)
+        self._reward_space = gym.spaces.Box(
+            low=0.0, high=1.0, shape=(1,), dtype=np.float32
+        )
         self._timestep = 0
 
     def reset(self) -> Dict[str, np.ndarray]:
@@ -78,30 +80,39 @@ class CartPoleEnv(BaseEnv):
             Dict[str, np.ndarray]: The initial observation from the environment.
         """
         if not self._init_flag:
-            self._env = gym.make(self._cfg['env_id'], render_mode="rgb_array")
+            self._env = gym.make(self._cfg["env_id"], render_mode="rgb_array")
             # If replay saving as GIF is enabled, prepare for recording.
             if self._save_replay_gif:
                 self._frames = []
-            if hasattr(self._cfg, 'obs_plus_prev_action_reward') and self._cfg.obs_plus_prev_action_reward:
+            if (
+                hasattr(self._cfg, "obs_plus_prev_action_reward")
+                and self._cfg.obs_plus_prev_action_reward
+            ):
                 self._env = ObsPlusPrevActRewWrapper(self._env)
             self._init_flag = True
 
         obs, _ = self._env.reset()
         self._eval_episode_return = 0
-        obs = to_ndarray(obs)
+        # obs = to_ndarray(obs)
+        obs = np.asarray(obs, dtype=np.float32)
 
         # Initialize the action mask and return the observation.
-        action_mask = np.ones(self.action_space.n, 'int8')
+        action_mask = np.ones(self.action_space.n, "int8")
         self._timestep = 0
 
-        obs = {'observation': obs, 'action_mask': action_mask, 'to_play': -1, 'timestep': self._timestep}
+        obs = {
+            "observation": obs,
+            "action_mask": action_mask,
+            "to_play": -1,
+            "timestep": self._timestep,
+        }
 
         # this is to artificially introduce randomness in order to evaluate the performance of
         # stochastic_muzero on state input
         if self._enable_chance:
             chance_value = random.randint(0, 2)
-            obs['observation'][chance_value] *= 2
-            obs['chance'] = chance_value
+            obs["observation"][chance_value] *= 2
+            obs["chance"] = chance_value
 
         return obs
 
@@ -129,6 +140,8 @@ class CartPoleEnv(BaseEnv):
 
         obs, rew, terminated, truncated, info = self._env.step(action)
         done = terminated or truncated
+        obs = np.asarray(obs, dtype=np.float32)
+        rew = np.float32(rew)
 
         # Record the frame if replay saving as GIF is enabled.
         if self._save_replay_gif:
@@ -137,21 +150,26 @@ class CartPoleEnv(BaseEnv):
         # Update rewards and check if the episode is done.
         self._eval_episode_return += rew
         if done:
-            info['eval_episode_return'] = self._eval_episode_return
+            info["eval_episode_return"] = self._eval_episode_return
             if self._save_replay_gif:
                 self.save_gif_replay()
 
-        action_mask = np.ones(self.action_space.n, 'int8')
+        action_mask = np.ones(self.action_space.n, "int8")
         self._timestep += 1
 
-        obs = {'observation': obs, 'action_mask': action_mask, 'to_play': -1, 'timestep': self._timestep}
+        obs = {
+            "observation": obs,
+            "action_mask": action_mask,
+            "to_play": -1,
+            "timestep": self._timestep,
+        }
 
         # this is to artificially introduce randomness in order to evaluate the performance of
         # stochastic_muzero on state input
         if self._enable_chance:
             chance_value = random.randint(0, 2)
-            obs['observation'][chance_value] *= 2
-            obs['chance'] = chance_value
+            obs["observation"][chance_value] *= 2
+            obs["chance"] = chance_value
 
         return BaseEnvTimestep(obs, rew, done, info)
 
@@ -163,7 +181,9 @@ class CartPoleEnv(BaseEnv):
             os.makedirs(self._replay_path_gif)
 
         timestamp = datetime.now().strftime("%Y%m%d%H%M%S")
-        gif_filename = f'{self._cfg["env_id"]}_episode_{self._save_replay_count}_{timestamp}.gif'
+        gif_filename = (
+            f'{self._cfg["env_id"]}_episode_{self._save_replay_count}_{timestamp}.gif'
+        )
         gif_path = os.path.join(self._replay_path_gif, gif_filename)
 
         # Create the GIF using the recorded frames.
@@ -181,12 +201,14 @@ class CartPoleEnv(BaseEnv):
             path (str): Path where the GIF will be saved.
         """
         patch = plt.imshow(frames[0])
-        plt.axis('off')
+        plt.axis("off")
 
         def animate(i):
             patch.set_data(frames[i])
 
-        anim = animation.FuncAnimation(plt.gcf(), animate, frames=len(frames), interval=50)
+        anim = animation.FuncAnimation(
+            plt.gcf(), animate, frames=len(frames), interval=50
+        )
         anim.save(path, writer=PillowWriter(fps=20))
 
     def close(self) -> None:
